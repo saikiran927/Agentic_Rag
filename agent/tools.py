@@ -32,6 +32,32 @@ def retrieve_context(query: str, top_k: int = 5) -> list[dict]:
         return []
 
 
+def ingest_url(url: str, chunk_size: int = 1000, chunk_overlap: int = 100) -> dict:
+    """Forward a URL to Rag_service's /ingest endpoint so its content gets
+    extracted, chunked, embedded, and stored in the vector store.
+
+    Raises requests.HTTPError / requests.RequestException on failure so the
+    caller (main.py) can translate it into an appropriate HTTP response
+    instead of silently swallowing it, since ingestion failures (e.g. a
+    page with no extractable content) are something the caller needs to know
+    about, unlike a failed retrieval which can safely degrade to "no context".
+    """
+    response = requests.post(
+        f"{RAG_SERVICE_URL}/ingest",
+        json={
+            "source_type": "url",
+            "url": url,
+            "chunk_size": chunk_size,
+            "chunk_overlap": chunk_overlap,
+        },
+        timeout=120,  # ingestion embeds every chunk; slower than a search call
+    )
+    response.raise_for_status()
+    result = response.json()
+    logger.info(f"ingest_url: {result} for url={url!r}")
+    return result
+
+
 def web_search(query: str, max_results: int = 5) -> list[dict]:
     """Escalation tool used when internal retrieval is not sufficient."""
     if not TAVILY_API_KEY:
